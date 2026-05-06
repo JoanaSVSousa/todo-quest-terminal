@@ -19,6 +19,7 @@ AUTH_ENABLED=true
 PLAYGROUND_MODE=false
 APP_USER=your-username
 APP_PASS=your-password
+APP_URL=https://your-private-app-url.example.com/
 EMAIL_ENABLED=true
 ```
 

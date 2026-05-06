@@ -19,6 +19,7 @@ Required for login:
 AUTH_ENABLED=true
 APP_USER=your-username
 APP_PASS=your-password
+APP_URL=https://your-private-app-url.example.com/
 ```
 
 For a public demo/playground:
@@ -44,6 +45,7 @@ EMAIL_USE_SSL=false
 EMAIL_USER=you@example.com
 EMAIL_PASS=your-email-password
 EMAIL_TO=recipient@example.com
+APP_URL=https://your-private-app-url.example.com/
 ```
 
 Required for hosted deploys:

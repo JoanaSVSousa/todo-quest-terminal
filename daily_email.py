@@ -77,7 +77,7 @@ def get_today_items(day=None):
     return focus_items
 
 
-def build_text_email(items):
+def build_text_email(items, app_url=""):
     """Build a plain-text fallback for email clients that block HTML."""
     lines = [f"TODAY {len(items)}/3", ""]
     if not items:
@@ -86,10 +86,12 @@ def build_text_email(items):
         for index, item in enumerate(items, start=1):
             status = "x" if item["done"] else " "
             lines.append(f"{index}. [{status}] {item['list']} {item['ref']} {item['text']}")
+    if app_url:
+        lines.extend(["", f"Open TODO Quest: {app_url}"])
     return "\n".join(lines)
 
 
-def build_html_email(items):
+def build_html_email(items, app_url=""):
     """Build a dark terminal-style HTML email.
 
     The markup uses inline styles and presentation tables because many email
@@ -126,6 +128,14 @@ def build_html_email(items):
 
         for index in range(len(items) + 1, 4):
             rows.append(f'<div class="slot" style="line-height:1.55;margin:6px 0;">{index}. [ ] ...</div>')
+
+    escaped_app_url = html.escape(app_url, quote=True)
+    open_app_link = (
+        '<div style="margin-top:18px;padding-top:14px;border-top:1px solid #007a33;">'
+        f'<a href="{escaped_app_url}" style="color:#001a08;background:#00ff66;text-decoration:none;padding:8px 12px;display:inline-block;text-shadow:none;">Open TODO Quest</a>'
+        '</div>'
+        if app_url else ""
+    )
 
     return f"""<!doctype html>
 <html style="margin:0;padding:0;background-color:#020402;background:#020402;">
@@ -196,6 +206,7 @@ def build_html_email(items):
               <div>TODO QUEST SYSTEM v2.0</div>
               <div class="title" style="color:#9dffbf;border-bottom:1px solid #007a33;padding-bottom:12px;margin-bottom:16px;">TODAY {len(items)}/3</div>
               {"".join(rows)}
+              {open_app_link}
             </td>
           </tr>
         </table>
@@ -219,12 +230,13 @@ def send_today_email(config=None):
         raise ValueError(f"Missing email config: {', '.join(missing)}")
 
     items = get_today_items()
+    app_url = settings.get("APP_URL", "")
     message = EmailMessage()
     message["Subject"] = f"Today {len(items)}/3 - TODO QUEST SYSTEM"
     message["From"] = settings["EMAIL_USER"]
     message["To"] = settings["EMAIL_TO"]
-    message.set_content(build_text_email(items))
-    message.add_alternative(build_html_email(items), subtype="html")
+    message.set_content(build_text_email(items, app_url))
+    message.add_alternative(build_html_email(items, app_url), subtype="html")
 
     host = settings["EMAIL_HOST"]
     port = int(settings["EMAIL_PORT"])
@@ -280,4 +292,5 @@ if __name__ == "__main__":
         sent_count = send_today_email(load_env())
         print(f"Sent Today email with {sent_count}/3 focus items.")
     else:
-        print(build_text_email(get_today_items()))
+        config = load_env()
+        print(build_text_email(get_today_items(), config.get("APP_URL", "")))
