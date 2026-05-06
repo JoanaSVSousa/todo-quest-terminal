@@ -1,11 +1,16 @@
 import json
+import os
 from pathlib import Path
 from datetime import date
 from threading import RLock
 import uuid
 
 DATA_FILE = Path("data/lists.json")
+EXAMPLE_DATA_FILE = Path("data/lists.example.json")
 DATA_LOCK = RLock()
+
+def playground_enabled():
+    return os.environ.get("PLAYGROUND_MODE", "false").lower() in {"1", "true", "yes", "on"}
 
 def normalize_item(item):
     subtasks = [
@@ -48,7 +53,11 @@ def load_data():
     with DATA_LOCK:
         if not DATA_FILE.exists():
             DATA_FILE.parent.mkdir(exist_ok=True)
-            save_data({"daily": {}, "lists": []})
+            if playground_enabled() and EXAMPLE_DATA_FILE.exists():
+                with open(EXAMPLE_DATA_FILE) as f:
+                    save_data(json.load(f))
+            else:
+                save_data({"daily": {}, "lists": []})
         with open(DATA_FILE) as f:
             data = normalize_data(json.load(f))
         save_data(data)
