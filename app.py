@@ -64,6 +64,7 @@ out                    leave the active list
 clear                  clear the terminal
 today                  show today's open tasks
 today <ref>            add/remove a daily focus item
+today - <n>            remove a Today item by its Today number
 email preview          preview the daily email
 email send             send the daily email now
 
@@ -75,6 +76,7 @@ wash dishes, take trash out
 details 1 due=2026-05-12 who=Joana
 details 1.1 priority=III
 today 1.1
+today - 1
 email preview
 x 1.1
 - 1.1
@@ -549,6 +551,23 @@ def format_today_focus():
     return "\n".join(lines)
 
 
+def remove_today_focus_slot(slot_ref):
+    """Remove a Today focus item by the number shown in the Today panel."""
+    slot_ref = slot_ref.strip().rstrip(".")
+    if not slot_ref.isdigit():
+        return "Use: today - <n>"
+
+    today = date.today().isoformat()
+    focus_items = get_daily_focus(today)
+    slot_index = int(slot_ref) - 1
+    if slot_index < 0 or slot_index >= len(focus_items):
+        return "Today item not found."
+
+    del focus_items[slot_index]
+    save_daily_focus(today, focus_items)
+    return format_today_focus()
+
+
 def format_email_preview():
     """Render the email preview in terminal text before sending."""
     items = get_today_items()
@@ -646,6 +665,12 @@ def handle_command(command):
             save_daily_focus(date.today().isoformat(), [])
             return format_today_focus()
 
+        if len(parts) == 2 and not get_active_list() and parts[1].strip().rstrip(".").isdigit():
+            return remove_today_focus_slot(parts[1])
+
+        if len(parts) == 3 and parts[1].lower() in {"-", "remove", "rm"}:
+            return remove_today_focus_slot(parts[2])
+
         todo_list, reference, target = resolve_command_target(parts)
         if not todo_list:
             return "No active list. Use: use <list|n>"
@@ -654,7 +679,7 @@ def handle_command(command):
 
         result = toggle_daily_focus(date.today().isoformat(), target)
         if result == "full":
-            return "Today is full: 3/3 focus items. Remove one with: today <ref>"
+            return "Today is full: 3/3 focus items. Remove one with: today - <n>"
         if result == "added":
             return format_today_focus()
         return format_today_focus()

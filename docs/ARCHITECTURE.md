@@ -64,6 +64,7 @@ operations:
 | `- <ref>` | Delete a task/subtask |
 | `details <ref> key=value` | Add optional metadata |
 | `today <ref>` | Add/remove a Today focus item |
+| `today - <n>` | Remove a Today item by the number in the Today panel |
 
 ## Storage Shape
 
