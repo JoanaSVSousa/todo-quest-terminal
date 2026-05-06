@@ -6,6 +6,7 @@
 html {
     min-height: 100%;
     background: #020402;
+    font-size: 16px;
 }
 
 body {
@@ -18,10 +19,12 @@ body {
     font-family: "Courier New", monospace;
     padding: 24px;
     text-shadow: 0 0 6px #00ff66;
+    overflow-wrap: anywhere;
 }
 
 #terminal {
     max-width: 1000px;
+    width: 100%;
     margin: auto;
     border: 1px solid #00ff66;
     padding: 24px;
@@ -51,6 +54,7 @@ body {
 #output {
     margin: 0 0 8px;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     line-height: 1.5;
 }
 
@@ -78,6 +82,10 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    position: sticky;
+    bottom: 0;
+    background: #000803;
+    padding-top: 8px;
 }
 
 /* Completion suggestions act like a small command palette below the input. */
@@ -116,6 +124,7 @@ body {
 /* The command input should feel like typing into the terminal itself. */
 #command-input {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
     color: #00ff66;
@@ -146,4 +155,58 @@ body::after {
         transparent 1px,
         transparent 4px
     );
+}
+
+@media (max-width: 640px) {
+    body {
+        padding: 10px;
+        font-size: 16px;
+    }
+
+    #terminal {
+        min-height: calc(100vh - 20px);
+        padding: 14px;
+    }
+
+    #today-panel {
+        margin-bottom: 14px;
+        padding-bottom: 12px;
+    }
+
+    #output {
+        font-size: 16px;
+        line-height: 1.45;
+        padding-bottom: 4px;
+    }
+
+    #input-line {
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    #prompt {
+        padding-top: 10px;
+        flex: 0 0 auto;
+    }
+
+    #command-input {
+        font-size: 18px;
+        line-height: 1.4;
+        min-height: 44px;
+        padding: 8px 0;
+    }
+
+    #completion-line {
+        gap: 8px 12px;
+        padding-left: 0;
+    }
+
+    .completion-option {
+        line-height: 1.4;
+        padding: 2px 0;
+    }
+
+    .terminal-action {
+        min-height: 24px;
+    }
 }
