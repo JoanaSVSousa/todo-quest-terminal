@@ -1,0 +1,39 @@
+{
+    "daily": {},
+    "lists": [
+        {
+            "id": "demo",
+            "name": "Demo",
+            "items": [
+                {
+                    "id": "demo-task-1",
+                    "text": "Explore the terminal commands",
+                    "done": false,
+                    "date": "2026-05-06",
+                    "details": {
+                        "priority": "II",
+                        "description": "Try help, details help, Tab autocomplete, and Today."
+                    },
+                    "subtasks": [
+                        {
+                            "id": "demo-subtask-1",
+                            "text": "Press Tab after typing details 1",
+                            "done": false,
+                            "details": {
+                                "priority": "I"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "id": "demo-task-2",
+                    "text": "Add three focus items to Today",
+                    "done": false,
+                    "date": "2026-05-06",
+                    "details": {},
+                    "subtasks": []
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TODO RPG TERMINAL</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+
+<div id="terminal">
+    <section id="today-panel" aria-label="Daily focus"></section>
+
+    <pre id="output">
+TODO QUEST SYSTEM v2.0
+Type 'help' for commands or 'details help' for detail fields. Use Tab to select options.
+
+&gt;
+    </pre>
+
+    <div id="input-line">
+        <span id="prompt">&gt;</span>
+        <input id="command-input" autofocus autocomplete="off">
+    </div>
+    <div id="completion-line" aria-live="polite"></div>
+</div>
+
+<script>
+const input = document.getElementById("command-input");
+const output = document.getElementById("output");
+const prompt = document.getElementById("prompt");
+const completionLine = document.getElementById("completion-line");
+const todayPanel = document.getElementById("today-panel");
+const commandHistory = [];
+const detailFields = ["due=", "who=", "location=", "repeat=", "recurring=", "priority=", "description="];
+const activeListActions = [
+    { insert: "+", label: "+ add" },
+    { insert: "-", label: "- remove" },
+    { insert: "x", label: "x toggle" },
+    { insert: "details", label: "details" },
+    { insert: "today", label: "today" },
+    { insert: "email", label: "email" },
+    { insert: "show", label: "show" },
+    { insert: "out", label: "out" }
+];
+const rootActions = [
+    { insert: "+", label: "+ add" },
+    { insert: "use", label: "use" },
+    { insert: "show", label: "show" },
+    { insert: "lists", label: "lists" },
+    { insert: "details", label: "details" },
+    { insert: "-", label: "- remove" },
+    { insert: "today", label: "today" },
+    { insert: "email", label: "email" },
+    { insert: "clear", label: "clear" }
+];
+const emailActions = [
+    { insert: "preview", label: "preview" },
+    { insert: "send", label: "send" }
+];
+let availableLists = [];
+let activeListItems = [];
+const terminalLines = [
+    "TODO QUEST SYSTEM v2.0",
+    "Type 'help' for commands or 'details help' for detail fields. Use Tab to select options.",
+    "",
+    ">"
+];
+let historyIndex = 0;
+let draftCommand = "";
+let completionOptions = [];
+let completionIndex = 0;
+
+async function refreshLists() {
+    try {
+        const response = await fetch("/lists");
+        const data = await response.json();
+        availableLists = data.lists || [];
+    } catch (error) {
+        availableLists = [];
+    }
+}
+
+async function refreshTodayPanel() {
+    try {
+        const response = await fetch("/today");
+        const data = await response.json();
+        const items = data.items || [];
+        const lines = [
+            `<div class="today-title">TODAY ${items.length}/3</div>`
+        ];
+
+        if (!items.length) {
+            lines.push(`<div class="today-slot">1. [ ] ...</div>`);
+            lines.push(`<div class="today-slot">2. [ ] ...</div>`);
+            lines.push(`<div class="today-slot">3. [ ] ...</div>`);
+        } else {
+            items.forEach((item, index) => {
+                const status = item.done ? "x" : " ";
+                const command = `done ${item.list} ${item.ref}`;
+                lines.push([
+                    `<div class="today-slot">${index + 1}. `,
+                    `<button class="terminal-action" type="button" data-command="${escapeAttribute(command)}" aria-label="Toggle today's focus item ${escapeAttribute(item.ref)}">[${status}]</button> `,
+                    `${escapeHtml(item.list)} ${escapeHtml(item.ref)} ${escapeHtml(item.text)}</div>`
+                ].join(""));
+            });
+
+            for (let index = items.length + 1; index <= 3; index += 1) {
+                lines.push(`<div class="today-slot">${index}. [ ] ...</div>`);
+            }
+        }
+
+        todayPanel.innerHTML = lines.join("");
+    } catch (error) {
+        todayPanel.innerHTML = `<div class="today-title">TODAY 0/3</div><div class="today-slot">Unable to load daily focus.</div>`;
+    }
+}
+
+async function refreshActiveList() {
+    try {
+        const response = await fetch("/active-list");
+        const data = await response.json();
+        activeListItems = data.items || [];
+    } catch (error) {
+        activeListItems = [];
+    }
+}
+
+function escapeHtml(text) {
+    const wrapper = document.createElement("span");
+    wrapper.textContent = text;
+    return wrapper.innerHTML;
+}
+
+function escapeAttribute(text) {
+    return String(text)
+        .replaceAll("&", "&amp;")
+        .replaceAll("\"", "&quot;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+}
+
+function renderLine(line, currentList) {
+    const checkboxMatch = line.match(/^(\s*)(\d+(?:\.\d+)?)(\.?)\s(\[[ x]\])(.*)$/);
+    if (!checkboxMatch) {
+        return escapeHtml(line);
+    }
+
+    const [, indent, ref, dot, checkbox, rest] = checkboxMatch;
+    const state = checkbox === "[x]" ? "x" : " ";
+    const toggleCommand = currentList ? `done ${currentList} ${ref}` : `x ${ref}`;
+    const detailCommand = currentList ? `details ${currentList} ${ref}` : `details ${ref}`;
+    const hasDetails = rest.endsWith(" {...}");
+    const visibleRest = hasDetails ? rest.slice(0, -" {...}".length) : rest;
+    return [
+        escapeHtml(indent + ref + dot + " "),
+        `<button class="terminal-action" type="button" data-command="${escapeAttribute(toggleCommand)}" aria-label="Toggle ${escapeAttribute(ref)}">[${state}]</button>`,
+        escapeHtml(visibleRest),
+        hasDetails
+            ? ` <button class="terminal-action" type="button" data-command="${escapeAttribute(detailCommand)}" aria-label="Show details for ${escapeAttribute(ref)}">{...}</button>`
+            : ""
+    ].join("");
+}
+
+function renderOutput() {
+    let currentList = "";
+    const renderedLines = terminalLines.map((line, index) => {
+        const nextLine = terminalLines[index + 1] || "";
+        if (line.startsWith(">") || line.includes("> ")) {
+            currentList = "";
+        }
+
+        if (
+            line &&
+            !line.startsWith(">") &&
+            !line.includes("> ") &&
+            !/^\s*\d+(?:\.\d+)?\.?\s\[[ x]\]/.test(line) &&
+            /^\s*\d+(?:\.\d+)?\.?\s\[[ x]\]/.test(nextLine)
+        ) {
+            currentList = line.trim();
+        }
+
+        return renderLine(line, currentList);
+    });
+
+    output.innerHTML = renderedLines.join("\n");
+}
+
+function appendOutput(text) {
+    terminalLines.push(...text.split("\n"));
+    renderOutput();
+}
+
+function getDetailCompletionState(command) {
+    const match = command.match(/^details\s+(.+)$/);
+    if (!match || /^details\s+(help|fields|\?)\s*$/i.test(command)) {
+        return null;
+    }
+
+    const afterDetails = match[1];
+    const referenceMatch = afterDetails.match(/(?:^|\s)(\d+(?:\.\d+)?\.?)(?:\s|$)/);
+    if (!referenceMatch) {
+        return null;
+    }
+
+    const refEnd = referenceMatch.index + referenceMatch[0].length;
+    const detailText = afterDetails.slice(refEnd).trimStart();
+    const usedFields = new Set(
+        [...detailText.matchAll(/(?:^|\s)-?([a-zA-Z]+)=?/g)]
+            .map((fieldMatch) => fieldMatch[1].toLowerCase())
+    );
+    const lastToken = detailText.split(/\s+/).pop() || "";
+    const filter = lastToken.includes("=") ? "" : lastToken.replace(/^-/, "").toLowerCase();
+    const options = detailFields.filter((field) => {
+        const key = field.slice(0, -1);
+        return !usedFields.has(key) && key.startsWith(filter);
+    });
+
+    return {
+        type: "detail",
+        detailText,
+        filter,
+        options: options.map((option) => ({
+            insert: option,
+            label: option
+        }))
+    };
+}
+
+function getListCompletionState(command) {
+    const match = command.match(/^(use|show|details|done|today|-)\s+(.*)$/i);
+    if (!match) return null;
+
+    const commandName = match[1].toLowerCase();
+    const argumentText = match[2];
+    const trimmedArgument = argumentText.trim();
+
+    if (
+        ["use", "show"].includes(commandName) &&
+        availableLists.some((todoList) => String(todoList.index) === trimmedArgument || todoList.name.toLowerCase() === trimmedArgument.toLowerCase())
+    ) {
+        return null;
+    }
+
+    if (commandName === "details" && /(?:^|\s)\d+(?:\.\d+)?\.?(?:\s|$)/.test(argumentText)) {
+        return null;
+    }
+
+    if (commandName === "-" && argumentText.startsWith("list ")) {
+        return null;
+    }
+
+    const normalizedArgument = argumentText.toLowerCase();
+    const options = availableLists
+        .filter((todoList) => {
+            const index = String(todoList.index);
+            return (
+                !argumentText ||
+                index.startsWith(normalizedArgument) ||
+                todoList.name.toLowerCase().startsWith(normalizedArgument)
+            );
+        })
+        .map((todoList) => ({
+            insert: String(todoList.index),
+            label: `${todoList.index}. ${todoList.name}`
+        }));
+
+    return {
+        type: "list",
+        commandName,
+        argumentText,
+        options
+    };
+}
+
+function getReferenceCompletionState(command) {
+    if (!prompt.textContent.startsWith("[")) return null;
+
+    const match = command.match(/^(details|today|x|-)\s+(.*)$/i);
+    if (!match) return null;
+
+    const commandName = match[1].toLowerCase();
+    const argumentText = match[2];
+    const trimmedArgument = argumentText.trim();
+
+    if (commandName === "details" && /(?:^|\s)\d+(?:\.\d+)?\.?(?:\s|$)/.test(argumentText)) {
+        return null;
+    }
+
+    if (["today", "x", "-"].includes(commandName) && /^\d+(?:\.\d+)?\.?$/.test(trimmedArgument)) {
+        return null;
+    }
+
+    const normalizedArgument = trimmedArgument.toLowerCase();
+    const options = activeListItems
+        .filter((item) => !normalizedArgument || item.ref.startsWith(normalizedArgument) || item.text.toLowerCase().startsWith(normalizedArgument))
+        .map((item) => ({
+            insert: item.ref,
+            label: `${item.ref} ${item.text}`
+        }));
+
+    return {
+        type: "reference",
+        commandName,
+        argumentText,
+        options
+    };
+}
+
+function getActionCompletionState(command) {
+    if (command.trim()) {
+        return null;
+    }
+
+    return {
+        type: "action",
+        options: prompt.textContent.startsWith("[") ? activeListActions : rootActions
+    };
+}
+
+function getEmailCompletionState(command) {
+    const match = command.match(/^email\s+(.*)$/i);
+    if (!match) return null;
+
+    const argumentText = match[1].toLowerCase();
+    const options = emailActions.filter((action) => action.insert.startsWith(argumentText));
+
+    return {
+        type: "email",
+        commandName: "email",
+        options
+    };
+}
+
+function updateCompletions() {
+    const state = getDetailCompletionState(input.value) || getEmailCompletionState(input.value) || getReferenceCompletionState(input.value) || getListCompletionState(input.value) || getActionCompletionState(input.value);
+    completionOptions = state ? state.options : [];
+    completionIndex = Math.min(completionIndex, Math.max(0, completionOptions.length - 1));
+
+    if (!completionOptions.length) {
+        completionLine.textContent = "";
+        completionLine.classList.remove("is-visible");
+        return;
+    }
+
+    completionLine.innerHTML = completionOptions.map((option, index) => {
+        const marker = index === completionIndex ? ">" : " ";
+        return `<button class="completion-option${index === completionIndex ? " is-selected" : ""}" type="button" data-completion="${escapeAttribute(option.insert)}">${marker} ${escapeHtml(option.label)}</button>`;
+    }).join("");
+    completionLine.classList.add("is-visible");
+}
+
+function moveCompletion(offset) {
+    if (!completionOptions.length) return;
+    completionIndex = (completionIndex + offset + completionOptions.length) % completionOptions.length;
+    updateCompletions();
+}
+
+function applyCompletion(option = completionOptions[completionIndex]) {
+    if (!option) return;
+    const selectedOption = typeof option === "string"
+        ? { insert: option, label: option }
+        : option;
+
+    const command = input.value;
+    const state = getDetailCompletionState(command) || getEmailCompletionState(command) || getReferenceCompletionState(command) || getListCompletionState(command) || getActionCompletionState(command);
+    if (!state) return;
+
+    let nextValue = "";
+
+    if (state.type === "detail") {
+        const trimmedEnd = command.replace(/\s+$/, "");
+        const replaceCurrentToken = state.filter && !state.detailText.endsWith(" ");
+        nextValue = replaceCurrentToken
+            ? trimmedEnd.replace(new RegExp(`${state.filter}$`, "i"), selectedOption.insert)
+            : `${trimmedEnd} ${selectedOption.insert}`;
+    } else if (state.type === "action") {
+        nextValue = ["out", "lists", "today", "clear"].includes(selectedOption.insert)
+            ? selectedOption.insert
+            : `${selectedOption.insert} `;
+    } else if (state.type === "reference") {
+        nextValue = `${state.commandName} ${selectedOption.insert}`;
+        if (state.commandName === "details" || state.commandName === "today") {
+            nextValue += " ";
+        }
+    } else if (state.type === "email") {
+        nextValue = `${state.commandName} ${selectedOption.insert}`;
+    } else {
+        nextValue = `${state.commandName} ${selectedOption.insert}`;
+        if (state.commandName === "details" || state.commandName === "done" || state.commandName === "today" || state.commandName === "-") {
+            nextValue += " ";
+        }
+    }
+
+    input.value = nextValue;
+    input.setSelectionRange(input.value.length, input.value.length);
+    completionIndex = 0;
+    updateCompletions();
+}
+
+async function runCommand(command, options = {}) {
+    if (!command) return;
+
+    if (!options.skipHistory) {
+        commandHistory.push(command);
+        historyIndex = commandHistory.length;
+        draftCommand = "";
+    }
+
+    appendOutput(prompt.textContent + " " + command);
+
+    try {
+        const response = await fetch("/command", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ command })
+        });
+
+        const data = await response.json();
+
+        if (data.response === "__CLEAR__") {
+            terminalLines.length = 0;
+            renderOutput();
+        } else {
+            appendOutput(data.response + "\n");
+        }
+
+        if (data.prompt) {
+            prompt.textContent = data.prompt;
+        }
+
+        await refreshLists();
+        await refreshTodayPanel();
+        await refreshActiveList();
+        updateCompletions();
+        window.scrollTo(0, document.body.scrollHeight);
+    } catch (error) {
+        appendOutput("ERROR: open the app through the local server, not file://.\nRun: python3 app.py\nThen open: http://127.0.0.1:5000\n");
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+}
+
+renderOutput();
+refreshLists();
+refreshTodayPanel();
+refreshActiveList();
+
+document.addEventListener("click", (event) => {
+    if (event.target.closest(".terminal-action")) return;
+    input.focus();
+});
+
+output.addEventListener("click", async function(event) {
+    const action = event.target.closest(".terminal-action");
+    if (!action) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    await runCommand(action.dataset.command, { skipHistory: false });
+    input.focus();
+});
+
+todayPanel.addEventListener("click", async function(event) {
+    const action = event.target.closest(".terminal-action");
+    if (!action) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    await runCommand(action.dataset.command, { skipHistory: false });
+    input.focus();
+});
+
+completionLine.addEventListener("mousedown", function(event) {
+    event.preventDefault();
+});
+
+completionLine.addEventListener("click", function(event) {
+    const option = event.target.closest(".completion-option");
+    if (!option) return;
+
+    const selectedOption = completionOptions.find((completion) => completion.insert === option.dataset.completion);
+    applyCompletion(selectedOption || option.dataset.completion);
+    input.focus();
+});
+
+input.addEventListener("input", updateCompletions);
+input.addEventListener("focus", updateCompletions);
+
+input.addEventListener("keydown", async function(event) {
+    if (completionOptions.length && event.key === "Tab") {
+        event.preventDefault();
+        applyCompletion();
+        return;
+    }
+
+    if (completionOptions.length && event.key === "ArrowRight") {
+        event.preventDefault();
+        moveCompletion(1);
+        return;
+    }
+
+    if (completionOptions.length && event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveCompletion(-1);
+        return;
+    }
+
+    if (event.key === "ArrowUp") {
+        if (!commandHistory.length) return;
+
+        event.preventDefault();
+        if (historyIndex === commandHistory.length) {
+            draftCommand = input.value;
+        }
+
+        historyIndex = Math.max(0, historyIndex - 1);
+        input.value = commandHistory[historyIndex];
+        input.setSelectionRange(input.value.length, input.value.length);
+        updateCompletions();
+        return;
+    }
+
+    if (event.key === "ArrowDown") {
+        if (!commandHistory.length) return;
+
+        event.preventDefault();
+        historyIndex = Math.min(commandHistory.length, historyIndex + 1);
+        input.value = historyIndex === commandHistory.length
+            ? draftCommand
+            : commandHistory[historyIndex];
+        input.setSelectionRange(input.value.length, input.value.length);
+        updateCompletions();
+        return;
+    }
+
+    if (event.key === "Enter") {
+        const command = input.value.trim();
+
+        if (!command) return;
+        input.value = "";
+        updateCompletions();
+        await runCommand(command);
+    }
+});
+</script>
+
+</body>
+</html>
