@@ -1,3 +1,9 @@
+"""Daily email support for TODO Quest Terminal.
+
+This module builds a terminal-styled HTML email from the Today focus list and
+can either send it immediately or schedule a background daily send.
+"""
+
 import html
 import smtplib
 import sys
@@ -15,6 +21,7 @@ ENV_FILE = BASE_DIR / ".env"
 
 
 def load_env(path=ENV_FILE):
+    """Load simple KEY=value settings without requiring python-dotenv."""
     values = {}
     if not path.exists():
         return values
@@ -29,10 +36,12 @@ def load_env(path=ENV_FILE):
 
 
 def is_enabled(config):
+    """Return whether the daily email scheduler should run."""
     return config.get("EMAIL_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
 
 
 def get_today_items(day=None):
+    """Resolve stored Today ids into display-ready task dictionaries."""
     selected_day = day or date.today().isoformat()
     focus_items = []
 
@@ -69,6 +78,7 @@ def get_today_items(day=None):
 
 
 def build_text_email(items):
+    """Build a plain-text fallback for email clients that block HTML."""
     lines = [f"TODAY {len(items)}/3", ""]
     if not items:
         lines.append("No focus items yet.")
@@ -80,6 +90,11 @@ def build_text_email(items):
 
 
 def build_html_email(items):
+    """Build a dark terminal-style HTML email.
+
+    The markup uses inline styles and presentation tables because many email
+    clients ignore normal CSS, especially background colors on body/html.
+    """
     rows = []
     if not items:
         rows.append('<div class="slot" style="line-height:1.55;margin:6px 0;">1. [ ] ...</div>')
@@ -196,6 +211,7 @@ def build_html_email(items):
 
 
 def send_today_email(config=None):
+    """Send the Today email through the SMTP settings from .env."""
     settings = config or load_env()
     required = ["EMAIL_HOST", "EMAIL_PORT", "EMAIL_USER", "EMAIL_PASS", "EMAIL_TO"]
     missing = [key for key in required if not settings.get(key)]
@@ -228,6 +244,7 @@ def send_today_email(config=None):
 
 
 def seconds_until_next_run(config):
+    """Calculate how long the scheduler should sleep until the next send."""
     timezone = ZoneInfo(config.get("EMAIL_TIMEZONE", "Europe/Lisbon"))
     hour_text, minute_text = config.get("EMAIL_TIME", "09:00").split(":", 1)
     now = datetime.now(timezone)
@@ -238,6 +255,7 @@ def seconds_until_next_run(config):
 
 
 def start_daily_email_scheduler():
+    """Start a daemon thread that sends the Today email once per day."""
     config = load_env()
     if not is_enabled(config):
         return None

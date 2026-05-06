@@ -25,6 +25,10 @@ Type 'help' for commands or 'details help' for detail fields. Use Tab to select 
 </div>
 
 <script>
+// Frontend state mirrors the terminal experience:
+// - terminalLines stores the visible command history.
+// - availableLists and activeListItems power context-aware autocomplete.
+// - commandHistory enables ArrowUp/ArrowDown command navigation.
 const input = document.getElementById("command-input");
 const output = document.getElementById("output");
 const prompt = document.getElementById("prompt");
@@ -71,6 +75,7 @@ let completionOptions = [];
 let completionIndex = 0;
 
 async function refreshLists() {
+    // The backend sends only lightweight list metadata for root-level commands.
     try {
         const response = await fetch("/lists");
         const data = await response.json();
@@ -81,6 +86,7 @@ async function refreshLists() {
 }
 
 async function refreshTodayPanel() {
+    // Today is kept above the terminal output so the 3 daily goals stay visible.
     try {
         const response = await fetch("/today");
         const data = await response.json();
@@ -116,6 +122,7 @@ async function refreshTodayPanel() {
 }
 
 async function refreshActiveList() {
+    // Active-list refs let autocomplete suggest tasks/subtasks instead of lists.
     try {
         const response = await fetch("/active-list");
         const data = await response.json();
@@ -126,12 +133,14 @@ async function refreshActiveList() {
 }
 
 function escapeHtml(text) {
+    // Render command responses safely while preserving terminal-like text.
     const wrapper = document.createElement("span");
     wrapper.textContent = text;
     return wrapper.innerHTML;
 }
 
 function escapeAttribute(text) {
+    // Command strings also appear inside data-command attributes.
     return String(text)
         .replaceAll("&", "&amp;")
         .replaceAll("\"", "&quot;")
@@ -140,6 +149,8 @@ function escapeAttribute(text) {
 }
 
 function renderLine(line, currentList) {
+    // Task lines are converted into clickable terminal controls:
+    // [ ] toggles done, and {...} opens details.
     const checkboxMatch = line.match(/^(\s*)(\d+(?:\.\d+)?)(\.?)\s(\[[ x]\])(.*)$/);
     if (!checkboxMatch) {
         return escapeHtml(line);
@@ -162,6 +173,8 @@ function renderLine(line, currentList) {
 }
 
 function renderOutput() {
+    // The backend returns plain text. This pass adds interactivity while keeping
+    // the command output readable if JavaScript is inspected.
     let currentList = "";
     const renderedLines = terminalLines.map((line, index) => {
         const nextLine = terminalLines[index + 1] || "";
@@ -191,6 +204,7 @@ function appendOutput(text) {
 }
 
 function getDetailCompletionState(command) {
+    // After "details 1.1 ", Tab cycles through available detail fields.
     const match = command.match(/^details\s+(.+)$/);
     if (!match || /^details\s+(help|fields|\?)\s*$/i.test(command)) {
         return null;
@@ -227,6 +241,7 @@ function getDetailCompletionState(command) {
 }
 
 function getListCompletionState(command) {
+    // At the root prompt, list-aware commands suggest list names/numbers.
     const match = command.match(/^(use|show|details|done|today|-)\s+(.*)$/i);
     if (!match) return null;
 
@@ -273,6 +288,7 @@ function getListCompletionState(command) {
 }
 
 function getReferenceCompletionState(command) {
+    // Inside a list, action commands suggest task/subtask references.
     if (!prompt.textContent.startsWith("[")) return null;
 
     const match = command.match(/^(details|today|x|-)\s+(.*)$/i);
@@ -307,6 +323,7 @@ function getReferenceCompletionState(command) {
 }
 
 function getActionCompletionState(command) {
+    // Empty input shows a compact command palette.
     if (command.trim()) {
         return null;
     }
@@ -318,6 +335,7 @@ function getActionCompletionState(command) {
 }
 
 function getEmailCompletionState(command) {
+    // Email has its own tiny subcommand palette: preview or send.
     const match = command.match(/^email\s+(.*)$/i);
     if (!match) return null;
 
@@ -332,6 +350,8 @@ function getEmailCompletionState(command) {
 }
 
 function updateCompletions() {
+    // More specific completion modes run first; generic command suggestions
+    // are only shown when no contextual suggestions apply.
     const state = getDetailCompletionState(input.value) || getEmailCompletionState(input.value) || getReferenceCompletionState(input.value) || getListCompletionState(input.value) || getActionCompletionState(input.value);
     completionOptions = state ? state.options : [];
     completionIndex = Math.min(completionIndex, Math.max(0, completionOptions.length - 1));
@@ -356,6 +376,7 @@ function moveCompletion(offset) {
 }
 
 function applyCompletion(option = completionOptions[completionIndex]) {
+    // Insert the selected suggestion in the format expected by each command.
     if (!option) return;
     const selectedOption = typeof option === "string"
         ? { insert: option, label: option }
@@ -398,6 +419,8 @@ function applyCompletion(option = completionOptions[completionIndex]) {
 }
 
 async function runCommand(command, options = {}) {
+    // All terminal input goes through /command so the backend remains the
+    // single source of truth for storage and command behavior.
     if (!command) return;
 
     if (!options.skipHistory) {

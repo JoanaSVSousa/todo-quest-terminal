@@ -1,3 +1,11 @@
+"""HTTP entry point and command parser for TODO Quest Terminal.
+
+The project intentionally uses Python's standard library instead of a web
+framework. That keeps the app readable for beginners while still showing the
+core moving parts of a web application: routing, authentication, JSON APIs,
+command parsing, and HTML serving.
+"""
+
 import json
 import os
 import re
@@ -31,7 +39,13 @@ from storage import (
 )
 
 BASE_DIR = Path(__file__).parent
+
+# Active list state is process-local. That is enough for the single-user
+# personal/playground version, and it keeps the command prompt simple.
 ACTIVE_LIST_ID = None
+
+# In-memory sessions are intentionally lightweight. For a real multi-user
+# product these would move to a database or signed server-side session store.
 SESSIONS = set()
 ENV = load_env()
 
@@ -89,14 +103,17 @@ details 1.1 clear"""
 
 
 def get_config(key, default=""):
+    """Read configuration from environment variables, falling back to .env."""
     return os.environ.get(key) or ENV.get(key, default)
 
 
 def auth_enabled():
+    """Return whether the single-user login screen should protect the app."""
     return get_config("AUTH_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
 
 
 def playground_enabled():
+    """Return whether public-demo safety rules should be applied."""
     return get_config("PLAYGROUND_MODE", "false").lower() in {"1", "true", "yes", "on"}
 
 
@@ -109,6 +126,7 @@ def app_port():
 
 
 def login_page(error=""):
+    """Render the terminal-themed login screen used in personal mode."""
     error_html = f'<div class="error">{error}</div>' if error else ""
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -178,10 +196,12 @@ def login_page(error=""):
 
 
 def normalize_id(text):
+    """Create a stable id from a user-facing list name."""
     return text.strip().lower().replace(" ", "-")
 
 
 def find_list(list_ref):
+    """Find a list by number, id, or normalized display name."""
     todo_lists = get_lists()
     list_ref = list_ref.strip().rstrip(".")
 
@@ -198,17 +218,20 @@ def find_list(list_ref):
 
 
 def get_active_list():
+    """Return the list currently selected in the terminal prompt."""
     if not ACTIVE_LIST_ID:
         return None
     return find_list(ACTIVE_LIST_ID)
 
 
 def set_active_list(todo_list):
+    """Update the terminal prompt context after use/out/list creation."""
     global ACTIVE_LIST_ID
     ACTIVE_LIST_ID = todo_list["id"] if todo_list else None
 
 
 def get_prompt():
+    """Build the prompt text shown before the command input."""
     active_list = get_active_list()
     if active_list:
         return f"[{active_list['name']}] >"
@@ -216,6 +239,7 @@ def get_prompt():
 
 
 def find_item(lista, item_number):
+    """Resolve a 1-based task number inside a list."""
     item_number = item_number.strip().rstrip(".")
     try:
         index = int(item_number) - 1
@@ -229,6 +253,7 @@ def find_item(lista, item_number):
 
 
 def find_subtask(item, subtask_number):
+    """Resolve a 1-based subtask number inside a task."""
     subtask_number = subtask_number.strip().rstrip(".")
     try:
         index = int(subtask_number) - 1
@@ -243,6 +268,7 @@ def find_subtask(item, subtask_number):
 
 
 def split_reference(reference):
+    """Split references like 2 or 2.3 into task/subtask parts."""
     reference = reference.strip().rstrip(".")
     chunks = reference.split(".")
     if len(chunks) == 1:
@@ -253,6 +279,7 @@ def split_reference(reference):
 
 
 def resolve_reference(todo_list, reference):
+    """Return the task and optional subtask matching a terminal reference."""
     item_number, subtask_number = split_reference(reference)
     if not item_number:
         return None, None
@@ -272,11 +299,13 @@ def resolve_reference(todo_list, reference):
 
 
 def can_resolve_item_reference(todo_list, reference):
+    """Check whether a reference points to a parent task, not a subtask."""
     item_number, subtask_number = split_reference(reference)
     return bool(item_number) and subtask_number is None and find_item(todo_list, item_number)
 
 
 def split_entries(text):
+    """Split comma-separated user input into task/subtask entries."""
     return [entry.strip() for entry in text.split(",") if entry.strip()]
 
 
@@ -315,14 +344,21 @@ DETAIL_DISPLAY_ORDER = ["priority", "due", "who", "location", "repeat", "recurri
 
 
 def looks_like_reference(value):
+    """Detect terminal references such as 1, 2.3, or 15.1."""
     return bool(re.fullmatch(r"\d+(?:\.\d+)?", value))
 
 
 def normalize_reference(reference):
+    """Normalize optional trailing dots from references like 1. or 2.3."""
     return reference.strip().rstrip(".")
 
 
 def parse_details(tokens):
+    """Parse detail tokens such as due=tomorrow, -repeat, or desc=free text.
+
+    The parser accepts simple key=value tokens and lets description-like values
+    continue across later tokens until another key appears.
+    """
     details = {}
     current_key = None
     for token in tokens:
@@ -352,6 +388,7 @@ def parse_details(tokens):
 
 
 def normalize_detail_value(key, value):
+    """Validate and normalize detail values with special handling for priority."""
     if key != "priority" or value == "":
         return value
 
@@ -365,6 +402,7 @@ def normalize_detail_value(key, value):
 
 
 def format_priority_marker(details):
+    """Render compact priority markers beside tasks, for example [III]."""
     priority = details.get("priority")
     if not priority:
         return ""
@@ -372,6 +410,7 @@ def format_priority_marker(details):
 
 
 def format_task_details(task):
+    """Format the detail view for a task or subtask."""
     details = task.get("details", {})
     lines = [f"{task['text']}"]
 
@@ -388,6 +427,7 @@ def format_task_details(task):
 
 
 def format_list(todo_list):
+    """Render a list as terminal text with numbered tasks and subtasks."""
     if not todo_list["items"]:
         return f"{todo_list['name']}: no tasks."
 
@@ -410,6 +450,7 @@ def format_list(todo_list):
 
 
 def find_target_labels(target):
+    """Convert stored Today target ids back into display labels and refs."""
     for list_index, todo_list in enumerate(get_lists(), start=1):
         if todo_list["id"] != target["list_id"]:
             continue
@@ -440,6 +481,7 @@ def find_target_labels(target):
 
 
 def get_today_focus_items():
+    """Return valid Today focus items and remove stale deleted references."""
     today = date.today().isoformat()
     focus_items = []
     valid_targets = []
@@ -457,6 +499,7 @@ def get_today_focus_items():
 
 
 def get_active_list_payload():
+    """Return active-list refs for frontend autocomplete."""
     active_list = get_active_list()
     if not active_list:
         return {"active": None, "items": []}
@@ -488,6 +531,7 @@ def get_active_list_payload():
 
 
 def format_today_focus():
+    """Render the Today panel as terminal text."""
     focus_items = get_today_focus_items()
     lines = [f"TODAY {len(focus_items)}/3"]
 
@@ -506,6 +550,7 @@ def format_today_focus():
 
 
 def format_email_preview():
+    """Render the email preview in terminal text before sending."""
     items = get_today_items()
     lines = [f"EMAIL PREVIEW - TODAY {len(items)}/3"]
     if not items:
@@ -524,6 +569,7 @@ def format_email_preview():
 
 
 def resolve_command_target(parts):
+    """Resolve commands that may target either the active list or a named list."""
     if len(parts) == 2:
         todo_list = get_active_list()
         reference = parts[1]
@@ -547,6 +593,7 @@ def resolve_command_target(parts):
 
 
 def format_lists():
+    """Render all lists, marking the active list with an asterisk."""
     todo_lists = get_lists()
     if not todo_lists:
         return "No lists yet. Use: + <name>"
@@ -559,6 +606,11 @@ def format_lists():
 
 
 def handle_command(command):
+    """Parse and execute one terminal command.
+
+    This function is the core command router. It converts short terminal
+    actions such as +, -, x, details, and today into storage operations.
+    """
     parts = command.split()
     if not parts:
         return ""
@@ -909,7 +961,10 @@ def handle_command(command):
 
 
 class TodoRequestHandler(BaseHTTPRequestHandler):
+    """Small HTTP controller for pages, JSON endpoints, auth, and commands."""
+
     def send_text(self, status, body, content_type="text/plain; charset=utf-8"):
+        """Send a UTF-8 response with an explicit content type."""
         encoded = body.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", content_type)
@@ -918,6 +973,7 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def get_session_id(self):
+        """Read the session id from the todo_session cookie."""
         header = self.headers.get("Cookie", "")
         if not header:
             return None
@@ -927,16 +983,19 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
         return cookie["todo_session"].value
 
     def is_authenticated(self):
+        """Apply auth rules while allowing playground mode to remain public."""
         if not auth_enabled():
             return True
         return self.get_session_id() in SESSIONS
 
     def send_redirect(self, location):
+        """Send a basic redirect response."""
         self.send_response(303)
         self.send_header("Location", location)
         self.end_headers()
 
     def send_auth_cookie(self, session_id):
+        """Set the login cookie after a successful login."""
         cookie = cookies.SimpleCookie()
         cookie["todo_session"] = session_id
         cookie["todo_session"]["path"] = "/"
@@ -948,6 +1007,7 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def clear_auth_cookie(self):
+        """Clear the login cookie on logout."""
         cookie = cookies.SimpleCookie()
         cookie["todo_session"] = ""
         cookie["todo_session"]["path"] = "/"
@@ -958,6 +1018,7 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        """Route browser requests for HTML, CSS, and JSON endpoints."""
         path = unquote(self.path.split("?", 1)[0])
 
         if path == "/login":
@@ -1012,6 +1073,7 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
         self.send_text(404, "Not found")
 
     def do_POST(self):
+        """Route login submissions and terminal command execution."""
         if self.path == "/login":
             content_length = int(self.headers.get("Content-Length", 0))
             raw_body = self.rfile.read(content_length).decode("utf-8")
@@ -1051,6 +1113,7 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
         self.send_text(200, body, "application/json; charset=utf-8")
 
     def log_message(self, format, *args):
+        """Silence default request logging to keep the terminal readable."""
         return
 
 

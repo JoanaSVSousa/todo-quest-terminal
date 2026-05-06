@@ -61,3 +61,8 @@ Do not commit `.env`. Use `.env.example` or `.env.playground.example` for public
 Do not commit `data/lists.json`. Use `data/lists.example.json` for demo content.
 
 The current login is intentionally simple and single-user. For a production multi-user version, the next step is moving to hashed passwords, per-user data, and database-backed sessions.
+
+## Code Tour
+
+For a fuller explanation of how the pieces fit together, see
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

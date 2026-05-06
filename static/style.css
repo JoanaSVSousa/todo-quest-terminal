@@ -1,3 +1,4 @@
+/* Shared terminal shell: dark CRT-inspired styling used by the app and login. */
 * {
     box-sizing: border-box;
 }
@@ -30,6 +31,7 @@ body {
     cursor: text;
 }
 
+/* Daily focus stays pinned at the top so the user's 3 goals remain visible. */
 #today-panel {
     border-bottom: 1px solid rgba(0, 255, 102, 0.45);
     margin: -4px 0 18px;
@@ -45,12 +47,14 @@ body {
     line-height: 1.45;
 }
 
+/* Terminal output keeps whitespace because command responses are plain text. */
 #output {
     margin: 0 0 8px;
     white-space: pre-wrap;
     line-height: 1.5;
 }
 
+/* Buttons are visually disguised as terminal text until hovered/focused. */
 .terminal-action {
     appearance: none;
     background: transparent;
@@ -76,6 +80,7 @@ body {
     gap: 8px;
 }
 
+/* Completion suggestions act like a small command palette below the input. */
 #completion-line {
     display: none;
     flex-wrap: wrap;
@@ -108,6 +113,7 @@ body {
     text-shadow: none;
 }
 
+/* The command input should feel like typing into the terminal itself. */
 #command-input {
     flex: 1;
     background: transparent;
@@ -127,6 +133,7 @@ body {
     text-shadow: none;
 }
 
+/* Subtle scanlines reinforce the terminal theme without blocking interaction. */
 body::after {
     content: "";
     pointer-events: none;

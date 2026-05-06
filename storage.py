@@ -1,3 +1,9 @@
+"""JSON persistence layer for TODO Quest Terminal.
+
+The app stores data in JSON on purpose: it keeps the project approachable while
+still demonstrating basic persistence, schema normalization, and safe writes.
+"""
+
 import json
 import os
 from pathlib import Path
@@ -7,12 +13,17 @@ import uuid
 
 DATA_FILE = Path("data/lists.json")
 EXAMPLE_DATA_FILE = Path("data/lists.example.json")
+
+# Multiple browser requests can arrive at the same time. The lock and unique
+# temp files prevent partial writes from corrupting lists.json.
 DATA_LOCK = RLock()
 
 def playground_enabled():
+    """Return whether first-run demo data should be copied from the example file."""
     return os.environ.get("PLAYGROUND_MODE", "false").lower() in {"1", "true", "yes", "on"}
 
 def normalize_item(item):
+    """Normalize old/new task keys into the current storage schema."""
     subtasks = [
         {
             "id": subtask["id"],
@@ -33,6 +44,7 @@ def normalize_item(item):
     }
 
 def normalize_data(data):
+    """Normalize the whole JSON document before the rest of the app uses it."""
     lists = data.get("lists", data.get("listas", []))
     return {
         "daily": data.get("daily", {}),
@@ -50,6 +62,7 @@ def normalize_data(data):
     }
 
 def load_data():
+    """Load JSON data, creating or normalizing the file when needed."""
     with DATA_LOCK:
         if not DATA_FILE.exists():
             DATA_FILE.parent.mkdir(exist_ok=True)
@@ -64,6 +77,7 @@ def load_data():
         return data
 
 def save_data(data):
+    """Write JSON atomically so interrupted writes do not leave broken files."""
     with DATA_LOCK:
         DATA_FILE.parent.mkdir(exist_ok=True)
         temp_file = DATA_FILE.with_name(f"{DATA_FILE.name}.{uuid.uuid4().hex}.tmp")
@@ -72,17 +86,21 @@ def save_data(data):
         temp_file.replace(DATA_FILE)
 
 def get_lists():
+    """Return all todo lists."""
     return load_data()["lists"]
 
 def get_daily_focus(day):
+    """Return Today focus targets for an ISO date."""
     return load_data().get("daily", {}).get(day, [])
 
 def save_daily_focus(day, focus_items):
+    """Replace Today focus targets for one ISO date."""
     data = load_data()
     data.setdefault("daily", {})[day] = focus_items
     save_data(data)
 
 def toggle_daily_focus(day, target):
+    """Add/remove a target from Today while enforcing the 3-item limit."""
     focus_items = get_daily_focus(day)
     normalized_target = {
         "list_id": target["list_id"],
@@ -104,6 +122,7 @@ def toggle_daily_focus(day, target):
     return "added"
 
 def create_list(name):
+    """Create a list if its normalized id does not already exist."""
     data = load_data()
     list_id = name.lower().replace(" ", "-")
 
@@ -119,6 +138,7 @@ def create_list(name):
     return True
 
 def delete_list(list_id):
+    """Delete one list by id."""
     data = load_data()
     original_count = len(data["lists"])
     data["lists"] = [
@@ -129,6 +149,7 @@ def delete_list(list_id):
     return len(data["lists"]) != original_count
 
 def add_item(list_id, text):
+    """Append a task to a list."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -146,6 +167,7 @@ def add_item(list_id, text):
     return False
 
 def toggle_item(list_id, item_id):
+    """Flip a task between open and done."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -158,6 +180,7 @@ def toggle_item(list_id, item_id):
     return False
 
 def add_subtask(list_id, item_id, text):
+    """Append a subtask to a parent task."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -175,6 +198,7 @@ def add_subtask(list_id, item_id, text):
     return False
 
 def update_subtask_details(list_id, item_id, subtask_id, details):
+    """Merge or remove optional detail fields on a subtask."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -194,6 +218,7 @@ def update_subtask_details(list_id, item_id, subtask_id, details):
     return False
 
 def update_item_details(list_id, item_id, details):
+    """Merge or remove optional detail fields on a task."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -211,6 +236,7 @@ def update_item_details(list_id, item_id, details):
     return False
 
 def clear_subtask_details(list_id, item_id, subtask_id):
+    """Remove all details from a subtask."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -225,6 +251,7 @@ def clear_subtask_details(list_id, item_id, subtask_id):
     return False
 
 def clear_item_details(list_id, item_id):
+    """Remove all details from a task."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -237,6 +264,7 @@ def clear_item_details(list_id, item_id):
     return False
 
 def toggle_subtask(list_id, item_id, subtask_id):
+    """Flip a subtask between open and done."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -251,6 +279,7 @@ def toggle_subtask(list_id, item_id, subtask_id):
     return False
 
 def delete_subtask(list_id, item_id, subtask_id):
+    """Delete one subtask from a parent task."""
     data = load_data()
     for todo_list in data["lists"]:
         if todo_list["id"] == list_id:
@@ -268,6 +297,7 @@ def delete_subtask(list_id, item_id, subtask_id):
     return False
 
 def get_order_of_the_day():
+    """Return incomplete tasks created today, grouped by list."""
     data = load_data()
     today = date.today().isoformat()
     result = []
@@ -282,6 +312,7 @@ def get_order_of_the_day():
 
     return result
 def delete_item(list_id, item_id):
+    """Delete one task and its subtasks."""
     data = load_data()
 
     for todo_list in data["lists"]:
