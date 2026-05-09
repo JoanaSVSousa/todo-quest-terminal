@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import shlex
+import html as html_tools
 from http import cookies
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,7 +31,10 @@ from storage import (
     get_daily_focus,
     get_lists,
     get_order_of_the_day,
+    load_data,
+    normalize_data,
     save_daily_focus,
+    save_data,
     toggle_item,
     toggle_subtask,
     toggle_daily_focus,
@@ -191,6 +195,80 @@ def login_page(error=""):
             <input name="password" type="password" autocomplete="current-password">
         </label>
         <button type="submit">login</button>
+    </form>
+</div>
+</body>
+</html>"""
+
+
+def import_page(message=""):
+    """Render a private JSON import/export page for hosted deployments."""
+    current_data = html_tools.escape(json.dumps(load_data(), indent=4, ensure_ascii=False))
+    message_html = f'<div class="notice">{html_tools.escape(message)}</div>' if message else ""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>TODO QUEST IMPORT</title>
+    <link rel="stylesheet" href="static/style.css">
+    <style>
+        #terminal {{
+            max-width: 900px;
+            min-height: auto;
+        }}
+        form {{
+            display: grid;
+            gap: 12px;
+            margin-top: 16px;
+        }}
+        textarea {{
+            width: 100%;
+            min-height: 320px;
+            background: #000803;
+            border: 1px solid #00ff66;
+            color: #00ff66;
+            font: inherit;
+            padding: 12px;
+            text-shadow: inherit;
+        }}
+        button,
+        .link-button {{
+            background: #00ff66;
+            border: 0;
+            color: #001a08;
+            cursor: pointer;
+            display: inline-block;
+            font: inherit;
+            padding: 10px 12px;
+            text-decoration: none;
+            text-shadow: none;
+        }}
+        .notice {{
+            color: #9dffbf;
+            margin-top: 12px;
+        }}
+        .actions {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 14px;
+        }}
+    </style>
+</head>
+<body>
+<div id="terminal">
+    <div>TODO QUEST SYSTEM v2.0</div>
+    <div>DATA IMPORT / EXPORT</div>
+    {message_html}
+    <div class="actions">
+        <a class="link-button" href="/">Back to app</a>
+        <a class="link-button" href="/export">Download JSON</a>
+    </div>
+    <form method="post" action="/import">
+        <label for="data-json">Paste lists.json here</label>
+        <textarea id="data-json" name="data_json" spellcheck="false">{current_data}</textarea>
+        <button type="submit">Import JSON</button>
     </form>
 </div>
 </body>
@@ -1066,6 +1144,21 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
             self.send_text(200, html, "text/html; charset=utf-8")
             return
 
+        if path == "/import":
+            self.send_text(200, import_page(), "text/html; charset=utf-8")
+            return
+
+        if path == "/export":
+            body = json.dumps(load_data(), indent=4, ensure_ascii=False)
+            encoded = body.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="lists.json"')
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
         if path == "/static/style.css":
             css = (BASE_DIR / "static" / "style.css").read_text(encoding="utf-8")
             self.send_text(200, css, "text/css; charset=utf-8")
@@ -1115,6 +1208,26 @@ class TodoRequestHandler(BaseHTTPRequestHandler):
                 return
 
             self.send_text(401, login_page("Invalid login."), "text/html; charset=utf-8")
+            return
+
+        if self.path == "/import":
+            if not self.is_authenticated():
+                self.send_redirect("/login")
+                return
+
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw_body = self.rfile.read(content_length).decode("utf-8")
+            fields = parse_qs(raw_body)
+            raw_json = fields.get("data_json", [""])[0]
+
+            try:
+                imported_data = normalize_data(json.loads(raw_json))
+            except (json.JSONDecodeError, KeyError, TypeError) as error:
+                self.send_text(400, import_page(f"Import failed: {error}"), "text/html; charset=utf-8")
+                return
+
+            save_data(imported_data)
+            self.send_text(200, import_page("Import complete."), "text/html; charset=utf-8")
             return
 
         if self.path != "/command":
