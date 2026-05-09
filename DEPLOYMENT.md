@@ -53,6 +53,7 @@ Required for hosted deploys:
 ```env
 HOST=0.0.0.0
 PORT=10000
+DATA_FILE=/var/data/lists.json
 ```
 
 Many hosts provide `PORT` automatically.
@@ -65,7 +66,7 @@ Use a Web Service with:
 python3 app.py
 ```
 
-Set secrets/environment variables in the Render dashboard. If you keep JSON storage, attach a persistent disk mounted to the app's `data` directory. Otherwise, use a database such as Postgres for production.
+Set secrets/environment variables in the Render dashboard. If you keep JSON storage, attach a persistent disk and point `DATA_FILE` to that disk, for example `/var/data/lists.json`. Otherwise, use a database such as Postgres for production.
 
 ## Fly.io
 

@@ -11,7 +11,7 @@ from datetime import date
 from threading import RLock
 import uuid
 
-DATA_FILE = Path("data/lists.json")
+DATA_FILE = Path(os.environ.get("DATA_FILE", "data/lists.json"))
 EXAMPLE_DATA_FILE = Path("data/lists.example.json")
 
 # Multiple browser requests can arrive at the same time. The lock and unique
