@@ -10,7 +10,8 @@ Use this for your own hosted app.
 
 - Login enabled
 - Daily email can be enabled
-- Data stays in JSON while the project is still learning-friendly
+- Data can stay in a local JSON file or move to Supabase while keeping the
+  same JSON-shaped structure
 
 Example config:
 
@@ -21,7 +22,12 @@ APP_USER=your-username
 APP_PASS=your-password
 APP_URL=https://your-private-app-url.example.com/
 EMAIL_ENABLED=true
+STORAGE_BACKEND=json
 ```
+
+For hosted personal use, `STORAGE_BACKEND=supabase` is the easiest way to keep
+the same lists available across devices without needing a paid persistent disk.
+See [`docs/SUPABASE.md`](docs/SUPABASE.md).
 
 ### Playground Mode
 
@@ -54,6 +60,21 @@ cp data/lists.example.json data/lists.json
 ```
 
 The real `data/lists.json` file is ignored by Git so local/private tasks stay private.
+
+## Supabase Storage
+
+The app can store the whole todo document in one Supabase Postgres row:
+
+```env
+STORAGE_BACKEND=supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-secret-or-service-role-key
+SUPABASE_TABLE=app_state
+SUPABASE_STATE_ID=main
+```
+
+Keep the Supabase secret/service key only in `.env` or hosting secrets.
+Never commit it or expose it in frontend JavaScript.
 
 ## Security Note
 

@@ -206,11 +206,13 @@ def import_page(message=""):
     """Render a private JSON import/export page for hosted deployments."""
     try:
         current_data = html_tools.escape(json.dumps(load_data(), indent=4, ensure_ascii=False))
-    except (OSError, json.JSONDecodeError) as error:
+    except (OSError, json.JSONDecodeError, RuntimeError) as error:
         current_data = ""
         message = (
-            f"Could not read DATA_FILE={DATA_FILE}. "
-            f"Check that the directory exists and is writable. Error: {error}"
+            f"Could not read the configured storage. "
+            f"If you use JSON, check DATA_FILE={DATA_FILE}. "
+            f"If you use Supabase, check the Supabase environment variables. "
+            f"Error: {error}"
         )
     message_html = f'<div class="notice">{html_tools.escape(message)}</div>' if message else ""
     return f"""<!DOCTYPE html>

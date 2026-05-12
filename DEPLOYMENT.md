@@ -54,9 +54,46 @@ Required for hosted deploys:
 HOST=0.0.0.0
 PORT=10000
 DATA_FILE=/var/data/lists.json
+STORAGE_BACKEND=json
 ```
 
 Many hosts provide `PORT` automatically.
+
+## Supabase Storage
+
+Supabase is useful when the app needs to be always online and available from
+multiple devices, but you still want the code to stay close to the JSON version
+you already understand.
+
+Create this table in the Supabase SQL Editor:
+
+```sql
+create table if not exists public.app_state (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.app_state enable row level security;
+```
+
+Then set these environment variables locally or in Render:
+
+```env
+STORAGE_BACKEND=supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your-secret-or-service-role-key
+SUPABASE_TABLE=app_state
+SUPABASE_STATE_ID=main
+```
+
+Use the Supabase secret/service key only on the backend. Do not put it in
+GitHub, browser JavaScript, mobile code, screenshots, or public docs.
+
+To migrate local lists, deploy with Supabase enabled, open `/import`, paste the
+contents of your local `data/lists.json`, and submit. After that, local and
+hosted apps can share the same Supabase data if they use the same Supabase
+environment variables.
 
 ## Render
 
@@ -67,6 +104,8 @@ python3 app.py
 ```
 
 Set secrets/environment variables in the Render dashboard. If you keep JSON storage, attach a persistent disk and point `DATA_FILE` to that disk, for example `/var/data/lists.json`. Otherwise, use a database such as Postgres for production.
+
+With Supabase storage, Render does not need a persistent disk for lists.
 
 ## Fly.io
 
