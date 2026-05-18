@@ -5,6 +5,7 @@ can either send it immediately or schedule a background daily send.
 """
 
 import html
+import os
 import smtplib
 import sys
 import threading
@@ -21,17 +22,22 @@ ENV_FILE = BASE_DIR / ".env"
 
 
 def load_env(path=ENV_FILE):
-    """Load simple KEY=value settings without requiring python-dotenv."""
-    values = {}
-    if not path.exists():
-        return values
+    """Load settings from .env and environment variables.
 
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        values[key.strip()] = value.strip().strip('"').strip("'")
+    Local development usually uses a .env file. Hosted providers such as Render
+    expose the same settings through real environment variables, so those values
+    must be merged in and allowed to override the local file.
+    """
+    values = {}
+    if path.exists():
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip('"').strip("'")
+
+    values.update(os.environ)
     return values
 
 
