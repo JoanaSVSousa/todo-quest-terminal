@@ -6,6 +6,7 @@ can either send it immediately or schedule a background daily send.
 
 import html
 import os
+import socket
 import smtplib
 import sys
 import threading
@@ -249,14 +250,24 @@ def send_today_email(config=None):
     use_tls = settings.get("EMAIL_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}
     use_ssl = settings.get("EMAIL_USE_SSL", "false").lower() in {"1", "true", "yes", "on"}
 
-    smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
-    with smtp_class(host, port, timeout=30) as smtp:
-        smtp.ehlo()
-        if use_tls and not use_ssl:
-            smtp.starttls()
+    timeout = int(settings.get("EMAIL_TIMEOUT", "30"))
+
+    try:
+        smtp_class = smtplib.SMTP_SSL if use_ssl else smtplib.SMTP
+        with smtp_class(host, port, timeout=timeout) as smtp:
             smtp.ehlo()
-        smtp.login(settings["EMAIL_USER"], settings["EMAIL_PASS"])
-        smtp.send_message(message)
+            if use_tls and not use_ssl:
+                smtp.starttls()
+                smtp.ehlo()
+            smtp.login(settings["EMAIL_USER"], settings["EMAIL_PASS"])
+            smtp.send_message(message)
+    except (TimeoutError, socket.timeout) as error:
+        raise TimeoutError(
+            f"SMTP connection to {host}:{port} timed out. "
+            "If this is running on Render Free, outbound SMTP ports 25, 465, "
+            "and 587 are blocked. Use a paid Render instance, an email provider "
+            "with an HTTPS API, or an SMTP provider/port that Render can reach."
+        ) from error
 
     return len(items)
 

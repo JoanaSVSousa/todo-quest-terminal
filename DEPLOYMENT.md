@@ -48,6 +48,11 @@ EMAIL_TO=recipient@example.com
 APP_URL=https://your-private-app-url.example.com/
 ```
 
+Render Free web services block outbound SMTP traffic on ports `25`, `465`, and
+`587`. If email sending times out on Render but works locally, use a paid Render
+instance, an email provider with an HTTPS API, or an SMTP provider/port that is
+reachable from Render.
+
 Required for hosted deploys:
 
 ```env
