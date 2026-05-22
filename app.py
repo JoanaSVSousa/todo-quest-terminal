@@ -61,7 +61,7 @@ lists                  show all lists
 use <list|n>           enter a list
 <task>, <task>         add tasks inside the active list
 x <ref>                toggle a task or subtask
-- <ref>                delete a task or subtask
+- <ref|list>           delete a task/subtask, or a list outside a list
 details <ref>          show or edit task/subtask details
 details help           show detail fields
 show                   show the active list
@@ -85,7 +85,8 @@ today - 1
 email preview
 x 1.1
 - 1.1
-out"""
+out
+- home"""
 
 
 DETAIL_HELP_TEXT = """Detail fields:
@@ -881,7 +882,12 @@ def handle_command(command):
     if action == "-" and len(parts) == 2:
         active_list = get_active_list()
         if not active_list:
-            return "No active list. Use: use <list|n>"
+            todo_list = find_list(parts[1])
+            if not todo_list:
+                return "List not found."
+
+            delete_list(todo_list["id"])
+            return f"List deleted: {todo_list['name']}"
 
         reference = normalize_reference(parts[1])
         item, subtask = resolve_reference(active_list, reference)
